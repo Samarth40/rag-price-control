@@ -22,8 +22,8 @@ load_dotenv()
 
 API_BASE_URL = os.environ.get("COST_CONTROL_API_URL", "http://localhost:8001")
 
-st.set_page_config(page_title="RAG Cost Control", page_icon="💸", layout="wide")
-st.title("💸 RAG Cost Control Layer")
+st.set_page_config(page_title="RAG Cost Control", layout="wide")
+st.title("RAG Cost Control Layer")
 st.caption(f"API: {API_BASE_URL} · Semantic cache + model routing + observability · **Built by Samarth Shinde**")
 
 namespace = st.sidebar.text_input("Namespace (e.g. tenant_id)", value="demo-tenant")
@@ -32,7 +32,7 @@ st.sidebar.caption(
     "use your Project 1 tenant_id here to track cost per tenant."
 )
 
-tab_try, tab_dashboard = st.tabs(["🧪 Try it", "📊 Dashboard"])
+tab_try, tab_dashboard = st.tabs(["Try it", "Dashboard"])
 
 # ---- Try it -------------------------------------------------------------
 with tab_try:
@@ -54,11 +54,11 @@ with tab_try:
             data = resp.json()
 
             if data["cache_hit"]:
-                st.success(f"⚡ Cache hit (similarity: {data['cache_similarity']:.3f}) — $0.00, no LLM call")
+                st.success(f"Cache hit (similarity: {data['cache_similarity']:.3f}) — $0.00, no LLM call")
             else:
-                badge = "🔺 escalated to strong model" if data.get("escalated") else ""
+                badge = "escalated to strong model" if data.get("escalated") else ""
                 st.info(
-                    f"🧭 Routed to **{data['model_used']}** {badge} — "
+                    f"Routed to **{data['model_used']}** {badge} — "
                     f"reason: _{data.get('route_reason', 'n/a')}_"
                 )
 

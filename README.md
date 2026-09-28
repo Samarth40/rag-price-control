@@ -1,131 +1,82 @@
-# RAG Cost Control Layer
+# RAG Price Control Layer
 
-[![Diagram](https://img.shields.io/badge/gitdiagram-view%20architecture-blue)](https://gitdiagram.com/samarth-shinde/rag-cost-control)
+[![GitHub Repository](https://img.shields.io/badge/GitHub-Repository-blue?logo=github)](https://github.com/Samarth40/rag-price-control)
+[![Diagram](https://img.shields.io/badge/gitdiagram-view%20architecture-blue)](https://gitdiagram.com/Samarth40/rag-price-control)
 
 *Built by Samarth Shinde*
 
-Reference implementation of the "Production RAG with Caching & Cost
-Controls" blueprint: semantic caching, tiered (BM25 + vector) retrieval,
-model routing/cascade with confidence-based escalation, and a cost/latency
-observability layer.
+## Overview
 
-Designed to sit **in front of** a RAG backend such as Project 1
-(Multi-Tenant RAG-as-a-Service) — pass its tenant_id in as `namespace` to
-get per-tenant cost tracking that lines up with Project 1's own usage
-metering.
+The RAG Price Control Layer is a robust, production-ready blueprint designed to optimize Retrieval-Augmented Generation (RAG) workflows. By sitting in front of your core RAG backend, this application intelligently manages query routing and caching to drastically reduce language model costs and improve response latency.
 
-## How the pieces fit together
+Key features include:
+- **Semantic Caching:** Instantly serve answers for near-duplicate queries at zero cost.
+- **Model Cascading and Routing:** Dynamically route queries to cost-effective models for simple tasks, only escalating to more expensive, powerful models when confidence is low.
+- **Tiered Retrieval:** Implement a two-stage retrieval process utilizing BM25 pre-filtering alongside vector search.
+- **Comprehensive Observability:** Track costs, latencies, cache hit rates, and escalation events on a per-tenant basis.
 
-```
-query --> [semantic cache check] --hit--> return cached answer, $0
-              |
-             miss
-              v
-        [complexity router] --> cheap model --> low confidence? --escalate--> strong model
-              |                                        |
-              v                                        v
-        [observability log: cost, latency, cache outcome, escalation]
-              |
-              v
-        [store answer in semantic cache for next near-duplicate query]
-```
+## System Architecture
 
-## Run it
+The workflow of a query through the price control layer:
 
-```bash
-cp .env.example .env
-# then edit .env and fill in your real GROK_API_KEY
+1. A query is received and checked against the semantic cache.
+2. If a cache hit occurs, the cached answer is returned immediately ($0 cost, minimal latency).
+3. On a cache miss, the complexity router analyzes the request.
+4. The query is routed to a lightweight, economical model.
+5. If the economical model yields low confidence, the query is escalated to a high-capacity model.
+6. Execution metrics (cost, latency, route taken) are logged in the observability database.
+7. The new answer is stored in the semantic cache for future similar requests.
 
-docker compose up -d redis
-pip install -r requirements.txt
+## Getting Started
 
-uvicorn app.main:app --port 8001 --reload
-```
+### Prerequisites
 
-`.env` is loaded automatically (via `python-dotenv`) by `main.py` and `streamlit_app.py` — no need to `export` variables manually in each terminal. It's git-ignored, so never commit it; `.env.example` documents every variable the app reads.
+Ensure you have Docker and Python installed on your system.
 
-In a second terminal:
-```bash
-export COST_CONTROL_API_URL=http://localhost:8001
-streamlit run streamlit_app.py
-```
+### Installation
 
-## Demo flow
+1. Copy the environment template and configure your API keys:
+   ```bash
+   cp .env.example .env
+   # Edit .env and supply your GROK_API_KEY
+   ```
 
-1. In the Streamlit **Try it** tab, ask: *"What is the refund policy?"*
-   with some context pasted in. It misses the cache, routes to the cheap
-   model (short factual question), and logs cost + latency.
-2. Ask a near-duplicate: *"How do refunds work?"* — this should hit the
-   semantic cache (similarity shown, cost $0.00).
-3. Ask something clearly multi-part/reasoning-heavy: *"Compare the refund
-   policy to the warranty policy and explain which is more generous and
-   why"* — this routes straight to the strong model.
-4. Check the **Dashboard** tab for aggregate cache hit rate, total cost,
-   avg latency, and escalation count over the selected window.
+2. Start the Redis instance for semantic caching:
+   ```bash
+   docker compose up -d redis
+   ```
 
-## API
+3. Install the required Python dependencies:
+   ```bash
+   pip install -r requirements.txt
+   ```
 
-- `POST /smart-query` — `{namespace, query, context}` → cached or freshly
-  generated answer, with cost/latency/routing metadata.
-- `GET /stats/{namespace}?window_seconds=86400` — aggregate metrics for
-  the dashboard.
+4. Launch the FastAPI backend:
+   ```bash
+   uvicorn app.main:app --port 8001 --reload
+   ```
 
-## Integration with Project 1
+5. In a separate terminal session, start the Streamlit dashboard:
+   ```bash
+   export COST_CONTROL_API_URL=http://localhost:8001
+   streamlit run streamlit_app.py
+   ```
 
-Two changes wire this project to Project 1:
+## API Reference
 
-**1. `multi-tenant-rag/app/routers/query.py` (Project 1)** — adds a
-retrieval-only `POST /query/retrieve` endpoint that returns chunks
-without generating an answer, so Project 1 doesn't also spend an LLM call
-on top of this project's routed one.
+The backend provides the following endpoints:
 
-**2. `rag-cost-control/app/services/orchestrator.py` (this project)** —
-`smart_query()` takes an optional `api_key` (Project 1's tenant API key).
-If `context` isn't supplied directly, it's fetched automatically by
-calling Project 1's new `/query/retrieve` endpoint.
+- `POST /smart-query`
+  Accepts a JSON payload containing `namespace`, `query`, and `context`. Returns either a cached response or a newly generated answer along with cost, latency, and routing metadata.
 
-Call it like:
+- `GET /stats/{namespace}?window_seconds=86400`
+  Retrieves aggregate performance metrics (cache hits, costs, latencies, escalations) for a specific namespace over a defined time window.
 
-```bash
-curl -X POST localhost:8001/smart-query \
-  -H "Content-Type: application/json" \
-  -d '{
-        "namespace": "<project1_tenant_id>",
-        "query": "What is the refund policy?",
-        "api_key": "<project1_tenant_api_key>"
-      }'
-```
+## Integration Guidelines
 
-Use Project 1's `tenant.id` as this project's `namespace` so cache
-entries, cost, and escalation stats are tracked per tenant — you can
-literally paste Project 1's `usage_events` cost figures next to this
-project's `/stats/{namespace}` response to show the before/after savings
-from caching + routing.
+To wire this layer with an existing RAG backend (such as a multi-tenant RAG-as-a-Service):
 
-## Notes on the illustrative pieces
+1. **Backend Adjustment:** Ensure your core RAG application provides a retrieval-only endpoint (e.g., `/query/retrieve`) that returns document chunks without invoking an LLM.
+2. **Orchestrator Setup:** In `rag-price-control/app/services/orchestrator.py`, the `smart_query()` function accepts an optional `api_key`. If no context is provided directly, the application will automatically fetch context chunks from your core backend's retrieval endpoint.
 
-- `COST_PER_1K_TOKENS` in `model_router.py` uses placeholder rates —
-  update to current published pricing before treating cost figures as
-  real budget numbers.
-- The semantic cache does a linear similarity scan (fine to a few
-  thousand entries/namespace). For larger scale, swap in `hnswlib` or a
-  vector DB with per-entry TTL.
-- `tiered_retrieval.py` (BM25 pre-filter) is provided standalone — wire it
-  in front of Project 1's `retrieve_chunks` for large corpora by first
-  calling `BM25PreFilter.prefilter()` to get candidate chunk IDs, then
-  restricting the pgvector query to that ID set.
-
-## Project layout
-
-```
-app/
-  core/
-    observability.py    # SQLite request log: cost, latency, cache hit, escalation
-  services/
-    semantic_cache.py     # Redis-backed near-duplicate query cache
-    model_router.py         # cheap/strong routing + confidence-based escalation
-    tiered_retrieval.py       # BM25 pre-filter before vector search
-    orchestrator.py            # ties cache + routing + logging together
-  main.py                       # FastAPI: /smart-query, /stats/{namespace}
-streamlit_app.py                # dashboard: try-it tester + cost/cache metrics
-```
+By passing a tenant ID as the `namespace` parameter, all cache entries, costs, and statistics are scoped to individual tenants, allowing for precise tracking of savings and performance improvements.
