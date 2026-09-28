@@ -24,7 +24,7 @@ API_BASE_URL = os.environ.get("COST_CONTROL_API_URL", "http://localhost:8001")
 
 st.set_page_config(page_title="RAG Cost Control", page_icon="💸", layout="wide")
 st.title("💸 RAG Cost Control Layer")
-st.caption(f"API: {API_BASE_URL} · Semantic cache + model routing + observability")
+st.caption(f"API: {API_BASE_URL} · Semantic cache + model routing + observability · **Built by Samarth Shinde**")
 
 namespace = st.sidebar.text_input("Namespace (e.g. tenant_id)", value="demo-tenant")
 st.sidebar.caption(
